@@ -22,6 +22,9 @@
         @keyframes fadeIn { from { opacity: 0; transform: translateY(5px); } to { opacity: 1; transform: translateY(0); } }
         .nav-btn.active { background: #1e40af; color: white; transform: scale(1.05); }
         
+        /* تحسينات الكاميرا */
+        #reader { border: none !important; border-radius: 1.5rem; overflow: hidden; }
+        
         @media print {
             body * { visibility: hidden; }
             #printArea, #printArea * { visibility: visible; }
@@ -122,6 +125,12 @@
         </nav>
     </div>
 
+    <div id="scanModal" class="hidden fixed inset-0 z-[10000] bg-black flex flex-col items-center justify-center p-4">
+        <div id="reader" class="w-full max-w-sm rounded-3xl"></div>
+        <div id="scanMsg" class="text-white font-black text-xl mt-8 text-center">جاري تشغيل الكاميرا...</div>
+        <button onclick="stopScanner()" class="mt-10 bg-white/20 text-white px-10 py-4 rounded-full font-bold backdrop-blur-md">إغلاق الكاميرا</button>
+    </div>
+
     <div id="infoModal" class="hidden fixed inset-0 z-[1000] bg-slate-900/90 backdrop-blur-sm flex items-center justify-center p-4">
         <div class="glass-card w-full max-w-2xl overflow-hidden shadow-2xl relative">
             <button onclick="closeInfoModal()" class="absolute top-4 left-4 text-3xl font-bold text-gray-400">&times;</button>
@@ -144,6 +153,7 @@
         firebase.initializeApp(firebaseConfig);
         const db = firebase.database();
         let allStudents = [];
+        let html5QrCode = null;
 
         function checkLogin() {
             if(document.getElementById('sysPass').value === "1234") {
@@ -161,6 +171,42 @@
             allStudents = snap.val() ? Object.values(snap.val()) : [];
             updateUI();
         });
+
+        // وظائف الكاميرا
+        function startScanner() {
+            document.getElementById('scanModal').classList.remove('hidden');
+            html5QrCode = new Html5Qrcode("reader");
+            const config = { fps: 10, qrbox: { width: 250, height: 250 } };
+            
+            html5QrCode.start({ facingMode: "environment" }, config, (decodedText) => {
+                const s = allStudents.find(st => String(st.id) === decodedText);
+                if(s) {
+                    const date = document.getElementById('attDate').value;
+                    db.ref(`attendance/${date}/${s.id}`).set({ 
+                        name: s.name, 
+                        time: new Date().toLocaleTimeString('ar-EG', {hour:'2-digit', minute:'2-digit'}) 
+                    });
+                    document.getElementById('scanMsg').innerHTML = `✅ تم تحضير:<br>${s.name}`;
+                    setTimeout(() => { document.getElementById('scanMsg').innerText = "في انتظار كود جديد..."; }, 2000);
+                } else {
+                    document.getElementById('scanMsg').innerText = "❌ كود غير مسجل!";
+                }
+            }).catch(err => {
+                document.getElementById('scanMsg').innerText = "⚠️ فشل تشغيل الكاميرا";
+            });
+        }
+
+        function stopScanner() {
+            if(html5QrCode) {
+                html5QrCode.stop().then(() => {
+                    document.getElementById('scanModal').classList.add('hidden');
+                }).catch(() => {
+                    document.getElementById('scanModal').classList.add('hidden');
+                });
+            } else {
+                document.getElementById('scanModal').classList.add('hidden');
+            }
+        }
 
         function updateUI(filtered = null) {
             const list = filtered || allStudents;
@@ -184,17 +230,13 @@
             loadAttendance();
         }
 
-        // دالة البحث في قائمة الحضور
         function filterAttendanceList(query) {
             const term = query.toLowerCase();
             const cards = document.querySelectorAll('#attList > div');
             cards.forEach(card => {
                 const name = card.getAttribute('data-name').toLowerCase();
-                if(name.includes(term)) {
-                    card.style.display = 'flex';
-                } else {
-                    card.style.display = 'none';
-                }
+                if(name.includes(term)) { card.style.display = 'flex'; } 
+                else { card.style.display = 'none'; }
             });
         }
 
@@ -202,8 +244,6 @@
             const date = document.getElementById('attDate').value;
             db.ref(`attendance/${date}`).on('value', snap => {
                 const logs = snap.val() || {};
-                
-                // تحديث قائمة الحضور مع دعم الفلترة
                 document.getElementById('attList').innerHTML = allStudents.map(s => {
                     const isP = logs[s.id];
                     return `<div data-name="${s.name}" class="glass-card p-4 flex justify-between items-center ${isP?'border-r-4 border-green-500':''}">
@@ -217,7 +257,6 @@
                     </div>`;
                 }).join('');
 
-                // تحديث قائمة الغياب
                 const absents = allStudents.filter(s => !logs[s.id]);
                 document.getElementById('absenceList').innerHTML = absents.map(s => `
                     <div class="glass-card p-4 border-l-4 border-red-500 flex justify-between items-center shadow-md">
@@ -228,8 +267,6 @@
                         <a href="https://wa.me/2${s.parentPhone}?text=مستر يحيى النوبي: الطالب ${s.name} غائب اليوم." target="_blank" class="bg-green-100 text-green-700 px-4 py-2 rounded-xl text-[10px] font-bold">تنبيه 📲</a>
                     </div>
                 `).join('');
-                
-                // إعادة تفعيل الفلترة إذا كان هناك نص في مربع البحث
                 filterAttendanceList(document.getElementById('attSearchInput').value);
             });
         }
@@ -271,8 +308,7 @@
                 <div class="grid grid-cols-1 md:grid-cols-2 gap-4 h-[300px] overflow-hidden">
                     <div class="flex flex-col"><h4 class="font-black text-sm mb-2 text-green-700">🗓️ سجل الحضور</h4><div class="overflow-y-auto flex-1 pr-2">${attHtml || 'لا يوجد'}</div></div>
                     <div class="flex flex-col"><h4 class="font-black text-sm mb-2 text-blue-700">📊 سجل الدرجات</h4><div class="overflow-y-auto flex-1 pr-2">${gradeHtml || 'لا يوجد'}</div></div>
-                </div>
-            `;
+                </div>`;
         }
 
         function closeInfoModal() { document.getElementById('infoModal').classList.add('hidden'); }
@@ -332,6 +368,7 @@
             setTimeout(() => { window.print(); }, 500);
         }
 
+        function deleteStd(id) { if(confirm('هل أنت متأكد من حذف الطالب؟')) db.ref('students/'+id).remove(); }
         function searchStudents(q) { updateUI(allStudents.filter(s => s.name.includes(q) || s.center.includes(q) || s.id.includes(q))); }
         function showTab(id) {
             document.querySelectorAll('.tab-content').forEach(c => c.classList.remove('active'));
@@ -339,7 +376,6 @@
             document.getElementById(id).classList.add('active');
             document.getElementById('btn-'+id).classList.add('active');
         }
-        function toggleDarkMode() { document.documentElement.classList.toggle('dark'); }
         document.getElementById('attDate').value = new Date().toISOString().split('T')[0];
     </script>
 </body>
