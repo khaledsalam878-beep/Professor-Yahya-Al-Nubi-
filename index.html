@@ -1,0 +1,346 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Yahia El-Nobi | Physics Dashboard v4</title>
+    
+    <script src="https://www.gstatic.com/firebasejs/9.6.1/firebase-app-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/9.6.1/firebase-database-compat.js"></script>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
+    <script src="https://unpkg.com/html5-qrcode@2.3.8/html5-qrcode.min.js"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Cairo:wght@400;700;900&display=swap" rel="stylesheet">
+
+    <style>
+        body { font-family: 'Cairo', sans-serif; background: #f8fafc; }
+        .dark body { background: #0f172a; }
+        .glass-card { background: rgba(255, 255, 255, 0.95); backdrop-filter: blur(10px); border-radius: 1.5rem; border: 1px solid rgba(0,0,0,0.05); }
+        .dark .glass-card { background: rgba(30, 41, 59, 0.9); border: 1px solid rgba(255,255,255,0.05); }
+        .tab-content { display: none; animation: fadeIn 0.3s ease; }
+        .tab-content.active { display: block; }
+        @keyframes fadeIn { from { opacity: 0; transform: translateY(5px); } to { opacity: 1; transform: translateY(0); } }
+        .nav-btn.active { background: #1e40af; color: white; transform: scale(1.05); }
+        
+        @media print {
+            body * { visibility: hidden; }
+            #printArea, #printArea * { visibility: visible; }
+            #printArea { position: absolute; left: 0; top: 0; width: 100%; display: block !important; }
+        }
+    </style>
+</head>
+<body class="transition-all duration-300">
+
+    <div id="loginModal" class="fixed inset-0 z-[9999] flex items-center justify-center p-4 bg-slate-900">
+        <div class="glass-card p-10 shadow-2xl w-full max-w-md text-center border-t-8 border-amber-500">
+            <img src="https://i.postimg.cc/vgWdFN6t/536797835-1338608134647355-1757609927020787797-n.jpg" class="w-24 h-24 rounded-full mx-auto mb-4 border-2 border-white" alt="Yahia">
+            <h1 class="text-2xl font-black text-slate-800 dark:text-white mb-6">مستر يحيى النوبي</h1>
+            <input type="password" id="sysPass" placeholder="كلمة المرور" class="w-full p-4 rounded-xl border text-center mb-4 outline-none font-bold">
+            <button onclick="checkLogin()" class="w-full bg-blue-700 text-white font-bold py-4 rounded-xl shadow-lg">دخول</button>
+        </div>
+    </div>
+
+    <div id="appContainer" class="opacity-0 transition-opacity duration-700 pb-32">
+        
+        <header class="p-4 lg:max-w-7xl mx-auto flex justify-between items-center glass-card mt-4 shadow-sm">
+            <div class="flex items-center gap-3">
+                <img src="https://i.postimg.cc/vgWdFN6t/536797835-1338608134647355-1757609927020787797-n.jpg" class="w-12 h-12 rounded-xl border-2 border-amber-400">
+                <h2 class="font-black text-slate-800 dark:text-white">مستر يحيى النوبي</h2>
+            </div>
+            <button onclick="startScanner()" class="bg-blue-700 text-white px-5 py-3 rounded-xl font-bold text-xs">📷 سكانر سريع</button>
+        </header>
+
+        <main class="px-4 lg:max-w-7xl mx-auto mt-6">
+            
+            <section id="students" class="tab-content active">
+                <div class="glass-card p-6 mb-6 shadow-sm">
+                    <h3 class="font-black mb-4">➕ إضافة طالب جديد</h3>
+                    <div class="grid grid-cols-1 md:grid-cols-3 lg:grid-cols-5 gap-3">
+                        <input type="text" id="stdName" placeholder="اسم الطالب" class="p-3 rounded-xl border outline-none font-bold">
+                        <input type="tel" id="stdPhone" placeholder="موبايل الطالب" class="p-3 rounded-xl border outline-none font-bold">
+                        <input type="tel" id="parentPhone" placeholder="رقم ولي الأمر" class="p-3 rounded-xl border outline-none font-bold">
+                        <input type="text" id="stdCenter" placeholder="السنتر" class="p-3 rounded-xl border outline-none font-bold">
+                        <button onclick="addStudent()" class="bg-slate-800 text-white font-bold rounded-xl p-3">حفظ ✅</button>
+                    </div>
+                </div>
+                <input type="text" onkeyup="searchStudents(this.value)" placeholder="🔍 ابحث في سجل الطلاب..." class="w-full p-5 rounded-2xl glass-card mb-6 shadow-sm border-none outline-none">
+                <div id="studentsGrid" class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4"></div>
+            </section>
+
+            <section id="attendance" class="tab-content">
+                <div class="glass-card p-6 mb-6">
+                    <div class="flex flex-col md:flex-row justify-between gap-4 mb-6">
+                        <h2 class="font-black text-xl">دفتر الحضور 📝</h2>
+                        <input type="date" id="attDate" onchange="loadAttendance()" class="p-3 rounded-xl border font-bold">
+                    </div>
+                    <div class="mb-6">
+                        <input type="text" id="attSearchInput" onkeyup="filterAttendanceList(this.value)" placeholder="🔍 ابحث عن اسم الطالب لتحضيره يدوياً..." class="w-full p-4 rounded-xl border-2 border-blue-50 focus:border-blue-500 outline-none font-bold shadow-inner">
+                    </div>
+                    <div id="attList" class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3"></div>
+                </div>
+            </section>
+
+            <section id="grades" class="tab-content">
+                <div class="glass-card p-8 max-w-xl mx-auto shadow-xl">
+                    <h2 class="text-2xl font-black mb-6 text-center text-blue-700">رصد نتيجة 📊</h2>
+                    <div class="space-y-4">
+                        <div class="relative">
+                            <input type="text" id="gradeSearchName" onkeyup="searchGradeStudent(this.value)" placeholder="اسم الطالب..." class="w-full p-4 rounded-xl border outline-none font-bold">
+                            <div id="gradeSearchResults" class="absolute z-50 w-full bg-white dark:bg-slate-800 shadow-2xl rounded-xl mt-1 hidden border"></div>
+                            <input type="hidden" id="selectedGradeStdId">
+                        </div>
+                        <input type="text" id="examName" placeholder="اسم الامتحان" class="w-full p-4 rounded-xl border outline-none">
+                        <div class="flex gap-4">
+                            <input type="number" id="gradeValue" placeholder="الدرجة" class="flex-1 p-4 rounded-xl border text-center font-black text-2xl">
+                            <input type="number" id="maxGrade" placeholder="من" class="w-24 p-4 rounded-xl border text-center">
+                        </div>
+                        <button onclick="saveGrade()" class="w-full bg-green-600 text-white font-black py-4 rounded-xl shadow-lg">حفظ وإرسال 📱</button>
+                    </div>
+                </div>
+            </section>
+
+            <section id="reports" class="tab-content">
+                <h2 class="font-black text-red-600 mb-4 px-2">الطلاب الغائبون اليوم 🚫</h2>
+                <div id="absenceList" class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4"></div>
+            </section>
+
+        </main>
+
+        <nav class="fixed bottom-6 left-1/2 -translate-x-1/2 w-[95%] max-w-md glass-card p-2 shadow-2xl z-50 flex justify-between">
+            <button onclick="showTab('students')" id="btn-students" class="nav-btn active p-3 rounded-xl flex-1 flex flex-col items-center">
+                <span>👥</span><span class="text-[9px] font-bold">الطلاب</span>
+            </button>
+            <button onclick="showTab('attendance')" id="btn-attendance" class="nav-btn p-3 rounded-xl flex-1 flex flex-col items-center">
+                <span>📅</span><span class="text-[9px] font-bold">الحضور</span>
+            </button>
+            <button onclick="showTab('grades')" id="btn-grades" class="nav-btn p-3 rounded-xl flex-1 flex flex-col items-center">
+                <span>📊</span><span class="text-[9px] font-bold">الدرجات</span>
+            </button>
+            <button onclick="showTab('reports')" id="btn-reports" class="nav-btn p-3 rounded-xl flex-1 flex flex-col items-center">
+                <span>🚫</span><span class="text-[9px] font-bold">الغياب</span>
+            </button>
+        </nav>
+    </div>
+
+    <div id="infoModal" class="hidden fixed inset-0 z-[1000] bg-slate-900/90 backdrop-blur-sm flex items-center justify-center p-4">
+        <div class="glass-card w-full max-w-2xl overflow-hidden shadow-2xl relative">
+            <button onclick="closeInfoModal()" class="absolute top-4 left-4 text-3xl font-bold text-gray-400">&times;</button>
+            <div id="infoContent" class="p-6 md:p-8"></div>
+        </div>
+    </div>
+
+    <div id="printArea" class="hidden"></div>
+
+    <script>
+        const firebaseConfig = {
+            apiKey: "AIzaSyB0r9hwB5TgH5G0TrIT6Z_SVn7rz0hYA2I",
+            authDomain: "job-6c3d4.firebaseapp.com",
+            databaseURL: "https://job-6c3d4-default-rtdb.firebaseio.com",
+            projectId: "job-6c3d4",
+            storageBucket: "job-6c3d4.firebasestorage.app",
+            messagingSenderId: "358260540934",
+            appId: "1:358260540934:web:cb7ea5f5fb3e34ca03e587"
+        };
+        firebase.initializeApp(firebaseConfig);
+        const db = firebase.database();
+        let allStudents = [];
+
+        function checkLogin() {
+            if(document.getElementById('sysPass').value === "1234") {
+                document.getElementById('loginModal').style.display = 'none';
+                document.getElementById('appContainer').style.opacity = '1';
+                localStorage.setItem('isLogged_Nobi', 'true');
+            }
+        }
+        if(localStorage.getItem('isLogged_Nobi') === 'true') {
+            document.getElementById('loginModal').style.display = 'none';
+            document.getElementById('appContainer').style.opacity = '1';
+        }
+
+        db.ref('students').on('value', (snap) => {
+            allStudents = snap.val() ? Object.values(snap.val()) : [];
+            updateUI();
+        });
+
+        function updateUI(filtered = null) {
+            const list = filtered || allStudents;
+            document.getElementById('studentsGrid').innerHTML = list.map(s => `
+                <div class="glass-card p-5 border-t-4 border-blue-600 shadow-sm relative">
+                    <button onclick="showInfo('${s.id}')" class="absolute top-3 left-3 bg-blue-100 text-blue-700 w-8 h-8 rounded-full font-black text-lg hover:bg-blue-600 hover:text-white transition">i</button>
+                    <div id="qr-${s.id}" class="mx-auto w-fit bg-white p-1 rounded-lg mb-3 border"></div>
+                    <h4 class="font-black text-center text-slate-800 dark:text-white mb-1 line-clamp-1">${s.name}</h4>
+                    <p class="text-[10px] text-center text-blue-500 font-bold mb-3">${s.center || 'بدون سنتر'}</p>
+                    <div class="flex gap-2">
+                        <button onclick="printID('${s.id}')" class="flex-1 bg-slate-100 dark:bg-slate-700 py-2 rounded-lg text-[10px] font-bold">🖨️ كارت</button>
+                        <button onclick="deleteStd('${s.id}')" class="bg-red-50 text-red-500 px-3 rounded-lg">🗑️</button>
+                    </div>
+                </div>
+            `).join('');
+
+            list.forEach(s => {
+                const el = document.getElementById(`qr-${s.id}`);
+                if(el) { el.innerHTML = ''; new QRCode(el, { text: String(s.id), width: 80, height: 80 }); }
+            });
+            loadAttendance();
+        }
+
+        // دالة البحث في قائمة الحضور
+        function filterAttendanceList(query) {
+            const term = query.toLowerCase();
+            const cards = document.querySelectorAll('#attList > div');
+            cards.forEach(card => {
+                const name = card.getAttribute('data-name').toLowerCase();
+                if(name.includes(term)) {
+                    card.style.display = 'flex';
+                } else {
+                    card.style.display = 'none';
+                }
+            });
+        }
+
+        function loadAttendance() {
+            const date = document.getElementById('attDate').value;
+            db.ref(`attendance/${date}`).on('value', snap => {
+                const logs = snap.val() || {};
+                
+                // تحديث قائمة الحضور مع دعم الفلترة
+                document.getElementById('attList').innerHTML = allStudents.map(s => {
+                    const isP = logs[s.id];
+                    return `<div data-name="${s.name}" class="glass-card p-4 flex justify-between items-center ${isP?'border-r-4 border-green-500':''}">
+                        <div class="flex flex-col">
+                            <span class="font-bold text-sm">${s.name}</span>
+                            <span class="text-[10px] text-gray-400">${s.center}</span>
+                        </div>
+                        <button onclick="toggleAtt('${s.id}','${s.name}',${!!isP})" class="px-4 py-2 rounded-lg text-xs font-black ${isP?'bg-green-600 text-white':'bg-slate-100'}">
+                            ${isP ? 'حضر ✅' : 'تحضير'}
+                        </button>
+                    </div>`;
+                }).join('');
+
+                // تحديث قائمة الغياب
+                const absents = allStudents.filter(s => !logs[s.id]);
+                document.getElementById('absenceList').innerHTML = absents.map(s => `
+                    <div class="glass-card p-4 border-l-4 border-red-500 flex justify-between items-center shadow-md">
+                        <div>
+                            <p class="font-bold">${s.name}</p>
+                            <p class="text-[10px] text-gray-400">سنتر: ${s.center}</p>
+                        </div>
+                        <a href="https://wa.me/2${s.parentPhone}?text=مستر يحيى النوبي: الطالب ${s.name} غائب اليوم." target="_blank" class="bg-green-100 text-green-700 px-4 py-2 rounded-xl text-[10px] font-bold">تنبيه 📲</a>
+                    </div>
+                `).join('');
+                
+                // إعادة تفعيل الفلترة إذا كان هناك نص في مربع البحث
+                filterAttendanceList(document.getElementById('attSearchInput').value);
+            });
+        }
+
+        async function showInfo(id) {
+            const s = allStudents.find(st => st.id == id);
+            const modal = document.getElementById('infoModal');
+            const content = document.getElementById('infoContent');
+            modal.classList.remove('hidden');
+            content.innerHTML = `<p class="text-center font-bold">جاري تحميل الملف...</p>`;
+
+            const attSnap = await db.ref('attendance').once('value');
+            const attData = attSnap.val() || {};
+            let attHtml = "";
+            Object.keys(attData).reverse().forEach(date => {
+                if(attData[date][id]) {
+                    attHtml += `<div class="flex justify-between p-2 bg-green-50 rounded-lg mb-1 text-xs"><span>📅 ${date}</span> <span class="font-bold">${attData[date][id].time}</span></div>`;
+                }
+            });
+
+            const gradeSnap = await db.ref('grades').once('value');
+            const gradeData = gradeSnap.val() || {};
+            let gradeHtml = Object.values(gradeData).filter(g => g.stdId == id).reverse().map(g => `
+                <div class="flex justify-between p-2 bg-blue-50 rounded-lg mb-1 text-xs"><span>📝 ${g.exam}</span> <span class="font-black text-blue-700">${g.score} / ${g.max}</span></div>
+            `).join('');
+
+            content.innerHTML = `
+                <div class="flex items-center gap-4 mb-6 border-b pb-4">
+                    <div class="w-16 h-16 bg-blue-600 text-white rounded-2xl flex items-center justify-center text-3xl font-black">${s.name[0]}</div>
+                    <div>
+                        <h2 class="text-xl font-black text-slate-800">${s.name}</h2>
+                        <span class="text-xs font-bold bg-amber-100 text-amber-700 px-2 py-0.5 rounded-full">${s.center}</span>
+                    </div>
+                </div>
+                <div class="grid grid-cols-2 gap-4 mb-6">
+                    <div class="bg-slate-50 p-3 rounded-xl"><p class="text-[10px] text-gray-400 font-black">رقم الطالب</p><p class="font-bold text-sm">${s.phone || '-'}</p></div>
+                    <div class="bg-slate-50 p-3 rounded-xl"><p class="text-[10px] text-gray-400 font-black">ولي الأمر</p><p class="font-bold text-sm">${s.parentPhone || '-'}</p></div>
+                </div>
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-4 h-[300px] overflow-hidden">
+                    <div class="flex flex-col"><h4 class="font-black text-sm mb-2 text-green-700">🗓️ سجل الحضور</h4><div class="overflow-y-auto flex-1 pr-2">${attHtml || 'لا يوجد'}</div></div>
+                    <div class="flex flex-col"><h4 class="font-black text-sm mb-2 text-blue-700">📊 سجل الدرجات</h4><div class="overflow-y-auto flex-1 pr-2">${gradeHtml || 'لا يوجد'}</div></div>
+                </div>
+            `;
+        }
+
+        function closeInfoModal() { document.getElementById('infoModal').classList.add('hidden'); }
+        function addStudent() {
+            const name = document.getElementById('stdName').value;
+            const phone = document.getElementById('stdPhone').value;
+            const parent = document.getElementById('parentPhone').value;
+            const center = document.getElementById('stdCenter').value;
+            if(!name || !parent) return alert("أكمل البيانات!");
+            const id = "N" + Math.floor(10000 + Math.random() * 90000);
+            db.ref('students/'+id).set({ id, name, phone, parentPhone: parent, center });
+            document.getElementById('stdName').value = ''; document.getElementById('stdPhone').value = '';
+            document.getElementById('parentPhone').value = ''; document.getElementById('stdCenter').value = '';
+        }
+
+        function toggleAtt(id, name, isP) {
+            const date = document.getElementById('attDate').value;
+            if(isP) db.ref(`attendance/${date}/${id}`).remove();
+            else db.ref(`attendance/${date}/${id}`).set({ name, time: new Date().toLocaleTimeString('ar-EG', {hour:'2-digit', minute:'2-digit'}) });
+        }
+
+        function searchGradeStudent(q) {
+            const div = document.getElementById('gradeSearchResults');
+            const results = allStudents.filter(s => s.name.includes(q));
+            if(q && results.length > 0) {
+                div.innerHTML = results.map(s => `<div onclick="selectStdForGrade('${s.id}', '${s.name}')" class="p-4 hover:bg-blue-50 cursor-pointer border-b font-bold">${s.name}</div>`).join('');
+                div.classList.remove('hidden');
+            } else div.classList.add('hidden');
+        }
+
+        function selectStdForGrade(id, name) {
+            document.getElementById('selectedGradeStdId').value = id;
+            document.getElementById('gradeSearchName').value = name;
+            document.getElementById('gradeSearchResults').classList.add('hidden');
+        }
+
+        function saveGrade() {
+            const id = document.getElementById('selectedGradeStdId').value;
+            const score = document.getElementById('gradeValue').value;
+            const max = document.getElementById('maxGrade').value;
+            const exam = document.getElementById('examName').value;
+            const s = allStudents.find(st => st.id == id);
+            if(!s || !score) return alert("البيانات ناقصة");
+            db.ref('grades/'+Date.now()).set({ stdId: id, score, max, exam, name: s.name });
+            window.open(`https://wa.me/2${s.parentPhone}?text=مستر يحيى النوبي: درجة الطالب ${s.name} في ${exam} هي ${score} من ${max}`);
+        }
+
+        function printID(id) {
+            const s = allStudents.find(st => st.id == id);
+            const pArea = document.getElementById('printArea');
+            pArea.innerHTML = `<div style="border:5px solid #1e3a8a;padding:20px;border-radius:20px;text-align:center;width:300px;background:white;margin:auto;font-family:'Cairo';">
+                <img src="https://i.postimg.cc/vgWdFN6t/536797835-1338608134647355-1757609927020787797-n.jpg" style="width:70px;height:70px;border-radius:50%">
+                <h2 style="color:#1e3a8a">يحيى النوبي</h2>
+                <div id="printQr" style="margin:15px auto;display:flex;justify-content:center"></div>
+                <h3>${s.name}</h3><p>سنتر: ${s.center}</p></div>`;
+            new QRCode(document.getElementById('printQr'), { text: String(s.id), width: 120, height: 120 });
+            setTimeout(() => { window.print(); }, 500);
+        }
+
+        function searchStudents(q) { updateUI(allStudents.filter(s => s.name.includes(q) || s.center.includes(q) || s.id.includes(q))); }
+        function showTab(id) {
+            document.querySelectorAll('.tab-content').forEach(c => c.classList.remove('active'));
+            document.querySelectorAll('.nav-btn').forEach(b => b.classList.remove('active'));
+            document.getElementById(id).classList.add('active');
+            document.getElementById('btn-'+id).classList.add('active');
+        }
+        function toggleDarkMode() { document.documentElement.classList.toggle('dark'); }
+        document.getElementById('attDate').value = new Date().toISOString().split('T')[0];
+    </script>
+</body>
+</html>
